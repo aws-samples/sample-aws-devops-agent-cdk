@@ -1,0 +1,164 @@
+import * as cdk from 'aws-cdk-lib';
+import { Construct } from 'constructs';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as devopsagent from 'aws-cdk-lib/aws-devopsagent';
+
+export class DevOpsAgentStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+
+    // 1. Create DevOps Agent Space Role (matches CLI step 1)
+    const agentSpaceRole = new iam.Role(this, 'DevOpsAgentSpaceRole', {
+      roleName: 'DevOpsAgentRole-AgentSpace',
+      assumedBy: new iam.ServicePrincipal('aidevops.amazonaws.com', {
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': this.account
+          },
+          ArnLike: {
+            'aws:SourceArn': `arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`
+          }
+        }
+      }),
+      description: 'Role for AWS DevOps Agent Space',
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('AIOpsAssistantPolicy')
+      ],
+      inlinePolicies: {
+        AllowExpandedAIOpsAssistantPolicy: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: 'AllowAwsSupportActions',
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'support:CreateCase',
+                'support:DescribeCases'
+              ],
+              resources: ['*']
+            }),
+            new iam.PolicyStatement({
+              sid: 'AllowExpandedAIOpsAssistantPolicy',
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'aidevops:GetKnowledgeItem',
+                'aidevops:ListKnowledgeItems',
+                'eks:AccessKubernetesApi',
+                'synthetics:GetCanaryRuns',
+                'route53:GetHealthCheckStatus',
+                'resource-explorer-2:Search'
+              ],
+              resources: ['*']
+            })
+          ]
+        })
+      }
+    });
+
+    // 2. Create Operator App Role (matches CLI step 2)
+    const operatorRole = new iam.Role(this, 'DevOpsOperatorRole', {
+      roleName: 'DevOpsAgentRole-WebappAdmin',
+      assumedBy: new iam.ServicePrincipal('aidevops.amazonaws.com', {
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': this.account
+          },
+          ArnLike: {
+            'aws:SourceArn': `arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`
+          }
+        }
+      }),
+      description: 'Role for AWS DevOps Agent Operator App',
+      inlinePolicies: {
+        AIDevOpsBasicOperatorActionsPolicy: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: 'AllowBasicOperatorActions',
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'aidevops:GetAgentSpace',
+                'aidevops:GetAssociation',
+                'aidevops:ListAssociations',
+                'aidevops:CreateBacklogTask',
+                'aidevops:GetBacklogTask',
+                'aidevops:UpdateBacklogTask',
+                'aidevops:ListBacklogTasks',
+                'aidevops:ListChildExecutions',
+                'aidevops:ListJournalRecords',
+                'aidevops:DiscoverTopology',
+                'aidevops:InvokeAgent',
+                'aidevops:ListGoals',
+                'aidevops:ListRecommendations',
+                'aidevops:ListExecutions',
+                'aidevops:GetRecommendation',
+                'aidevops:UpdateRecommendation',
+                'aidevops:CreateKnowledgeItem',
+                'aidevops:ListKnowledgeItems',
+                'aidevops:GetKnowledgeItem',
+                'aidevops:UpdateKnowledgeItem',
+                'aidevops:ListPendingMessages',
+                'aidevops:InitiateChatForCase',
+                'aidevops:EndChatForCase',
+                'aidevops:DescribeSupportLevel',
+                'aidevops:SendChatMessage'
+              ],
+              resources: [`arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`]
+            }),
+            new iam.PolicyStatement({
+              sid: 'AllowSupportOperatorActions',
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'support:DescribeCases',
+                'support:InitiateChatForCase',
+                'support:DescribeSupportLevel'
+              ],
+              resources: ['*']
+            })
+          ]
+        })
+      }
+    });
+
+    // 3. Create Agent Space using proper L1 construct
+    const agentSpace = new devopsagent.CfnAgentSpace(this, 'MyAgentSpace', {
+      name: 'MyCDKAgentSpace',
+      description: 'AgentSpace for monitoring my application using CDK'
+    });
+
+    // 4. Associate AWS Account using proper L1 construct
+    const awsAssociation = new devopsagent.CfnAssociation(this, 'AWSAssociation', {
+      agentSpaceId: agentSpace.ref,
+      serviceId: 'aws',
+      configuration: {
+        aws: {
+          assumableRoleArn: agentSpaceRole.roleArn,
+          accountId: this.account,
+          accountType: 'monitor',
+          resources: []
+        }
+      }
+    });
+
+    awsAssociation.addDependency(agentSpace);
+
+    // Outputs
+    new cdk.CfnOutput(this, 'AgentSpaceId', {
+      value: agentSpace.ref,
+      description: 'ID of the created DevOps Agent Space'
+    });
+
+    new cdk.CfnOutput(this, 'AgentSpaceRoleArn', {
+      value: agentSpaceRole.roleArn,
+      description: 'ARN of the DevOps Agent Space Role'
+    });
+
+    new cdk.CfnOutput(this, 'OperatorRoleArn', {
+      value: operatorRole.roleArn,
+      description: 'ARN of the DevOps Agent Operator Role'
+    });
+
+    new cdk.CfnOutput(this, 'AssociationId', {
+      value: awsAssociation.attrAssociationId,
+      description: 'ID of the AWS Association'
+    });
+  }
+}
