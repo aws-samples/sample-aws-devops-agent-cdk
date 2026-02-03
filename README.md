@@ -44,7 +44,7 @@ The stack creates the following resources using CloudFormation:
 
 3. Deploy the stack:
    ```bash
-   cdk deploy --region us-east-1
+   export AWS_REGION=us-east-1 &&  cdk deploy
    ```
 
 4. Enable the operator app (post-deployment):
@@ -128,3 +128,4 @@ cdk destroy
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
+
