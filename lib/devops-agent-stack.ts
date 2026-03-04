@@ -3,10 +3,17 @@ import { Construct } from 'constructs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as devopsagent from 'aws-cdk-lib/aws-devopsagent';
 
+export interface DevOpsAgentStackProps extends cdk.StackProps {
+  /**
+   * Account ID of the secondary (service) account for cross-account monitoring
+   */
+  secondaryAccountId: string;
+}
+
 export class DevOpsAgentStack extends cdk.Stack {
   public readonly agentSpaceArn: string;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: DevOpsAgentStackProps) {
     super(scope, id, props);
 
     // 1. Create DevOps Agent Space Role (matches CLI step 1)
@@ -18,7 +25,7 @@ export class DevOpsAgentStack extends cdk.Stack {
             'aws:SourceAccount': this.account
           },
           ArnLike: {
-            'aws:SourceArn': `arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`
+            'aws:SourceArn': `arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`
           }
         }
       }),
@@ -65,7 +72,7 @@ export class DevOpsAgentStack extends cdk.Stack {
             'aws:SourceAccount': this.account
           },
           ArnLike: {
-            'aws:SourceArn': `arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`
+            'aws:SourceArn': `arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`
           }
         }
       }),
@@ -103,7 +110,7 @@ export class DevOpsAgentStack extends cdk.Stack {
                 'aidevops:DescribeSupportLevel',
                 'aidevops:SendChatMessage'
               ],
-              resources: [`arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`]
+              resources: [`arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`]
             }),
             new iam.PolicyStatement({
               sid: 'AllowSupportOperatorActions',
@@ -151,9 +158,9 @@ export class DevOpsAgentStack extends cdk.Stack {
       agentSpaceId: agentSpace.ref,
       serviceId: 'aws',
       configuration: {
-        aws: {
-          assumableRoleArn: '', // TODO: from role.
-          accountId: '',
+        sourceAws: {
+          assumableRoleArn: `arn:aws:iam::${props.secondaryAccountId}:role/DevOpsAgentRole-SecondaryAccount`,
+          accountId: props.secondaryAccountId,
           accountType: 'source',
         }
       }

@@ -3,31 +3,33 @@ import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
 import { DevOpsAgentStack } from "../lib/devops-agent-stack";
 import { ServiceStack } from "../lib/service-stack";
-import { SERVICE_ACCOUNT_ID } from "../lib/constants";
+import {
+  MONITORING_ACCOUNT_ID,
+  SERVICE_ACCOUNT_ID,
+  AGENT_SPACE_ARN,
+  DEPLOY_REGION,
+} from "../lib/constants";
 
 const app = new cdk.App();
 
-// Primary account stack with Agent Space
-const devOpsStack = new DevOpsAgentStack(app, "DevOpsAgentStack", {
+// Primary account stack — Agent Space, IAM roles, and associations
+new DevOpsAgentStack(app, "DevOpsAgentStack", {
+  secondaryAccountId: SERVICE_ACCOUNT_ID,
   env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION,
+    account: MONITORING_ACCOUNT_ID,
+    region: DEPLOY_REGION,
   },
 });
 
-if (process.env.SERVICE_ACCOUNT_ID) {
-  // Secondary account stack with Echo service and cross-account role
-  // Deploy this in the service account using the ID from constants.ts
-  // Uses explicit CloudFormation exports from DevOpsAgentStack
-  const serviceStack = new ServiceStack(app, "ServiceStack", {
-    agentSpaceArn: cdk.Fn.importValue("DevOpsAgentSpaceArn"),
-    primaryAccountId: cdk.Fn.importValue("DevOpsAgentPrimaryAccountId"),
+// Secondary account stack — echo service and cross-account role
+// Only deployable after AGENT_SPACE_ARN is set from DevOpsAgentStack output
+if (AGENT_SPACE_ARN) {
+  new ServiceStack(app, "ServiceStack", {
+    agentSpaceArn: AGENT_SPACE_ARN,
+    primaryAccountId: MONITORING_ACCOUNT_ID,
     env: {
       account: SERVICE_ACCOUNT_ID,
-      region: process.env.CDK_DEFAULT_REGION,
+      region: DEPLOY_REGION,
     },
   });
-
-  // ServiceStack depends on DevOpsAgentStack
-  serviceStack.addDependency(devOpsStack);
 }
