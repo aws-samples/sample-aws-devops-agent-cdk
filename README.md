@@ -1,131 +1,161 @@
-# AWS DevOps Agent CDK Application
+# Tutorial: Deploy AWS DevOps Agent with CDK
 
-This CDK application creates a complete AWS DevOps Agent setup using CloudFormation resources, including the agent space, IAM roles, and AWS account association.
+This tutorial walks you through deploying an AWS DevOps Agent Space that monitors your AWS account. Optionally, you can extend it to monitor a second (service) account via cross-account access.
+
+## What you'll build
+
+1. An Agent Space with an operator app and an AWS association, so the agent can monitor issues in your monitoring account.
+2. (Optional) A source AWS association to a service account, plus a ServiceStack deployed into that account with an IAM role that trusts the Agent Space.
 
 ## Prerequisites
 
 - AWS CLI configured with appropriate credentials
 - Node.js (version 18 or later)
-- AWS CDK CLI installed globally: `npm install -g aws-cdk`
+- AWS CDK CLI: `npm install -g aws-cdk`
+- One or two AWS accounts (depending on whether you do the optional step)
 
+Install project dependencies:
 
-## Setup
+```bash
+npm install
+```
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+---
 
-2. Bootstrap your AWS environment (if not done before):
-   ```bash
-   cdk bootstrap
-   ```
+## Part 1: Deploy the Agent Space (Monitoring Account)
 
-## Configuration
+This creates the Agent Space, IAM roles, operator app, and an AWS association in your monitoring account.
 
-The stack creates the following resources using CloudFormation:
+### 1.1 Configure your monitoring account ID
 
-- **DevOps Agent Space Role**: `DevOpsAgentRole-AgentSpace` with proper trust policy and permissions
-- **Operator App Role**: `DevOpsAgentRole-WebappAdmin` for the operator application
-- **Agent Space**: Named `MyAgentSpace` created via `AWS::DevOpsAgent::AgentSpace`
-- **AWS Account Association**: Links the agent space to your AWS account via `AWS::DevOpsAgent::Association`
+Edit `lib/constants.ts` and set your monitoring account ID:
 
-## Deployment
+```typescript
+export const MONITORING_ACCOUNT_ID = "<YOUR_MONITORING_ACCOUNT_ID>";
+```
 
-1. Build the TypeScript code:
-   ```bash
-   npm run build
-   ```
+### 1.2 Bootstrap CDK (if not done before)
 
-2. Preview the changes:
-   ```bash
-   cdk diff
-   ```
+```bash
+cdk bootstrap aws://<MONITORING_ACCOUNT_ID>/us-east-1 --profile monitoring
+```
 
-3. Deploy the stack:
-   ```bash
-   export AWS_REGION=us-east-1 &&  cdk deploy
-   ```
+### 1.3 Build and deploy
 
-4. Enable the operator app (post-deployment):
-   ```bash
-   ./scripts/enable-operator-app.sh
-   ```
+```bash
+npm run build
+cdk deploy DevOpsAgentStack --profile monitoring
+```
 
-## What Gets Created
+### 1.4 Note the outputs
 
-### IAM Roles
-- **DevOpsAgentRole-AgentSpace**: Main role for the agent space with:
-  - Trust policy for `aidevops.amazonaws.com` service
-  - `AIOpsAssistantPolicy` managed policy
-  - Additional inline policies for support and expanded permissions
+After deployment, CDK prints the stack outputs. You'll see something like:
 
-- **DevOpsAgentRole-WebappAdmin**: Operator app role with:
-  - Trust policy for `aidevops.amazonaws.com` service  
-  - Inline policies for basic operator actions and support
+```
+Outputs:
+DevOpsAgentStack.AgentSpaceArn = arn:aws:aidevops:us-east-1:650138640062:agentspace/abc123
+DevOpsAgentStack.AgentSpaceRoleArn = arn:aws:iam::650138640062:role/DevOpsAgentRole-AgentSpace
+DevOpsAgentStack.OperatorRoleArn = arn:aws:iam::650138640062:role/DevOpsAgentRole-WebappAdmin
+DevOpsAgentStack.AssociationId = assoc-xyz
+```
 
-### DevOps Agent Resources
-- **Agent Space**: Created using `AWS::DevOpsAgent::AgentSpace` CloudFormation resource
-- **AWS Association**: Created using `AWS::DevOpsAgent::Association` CloudFormation resource
+Save the `AgentSpaceArn` — you'll need it if you proceed to Part 2.
 
-## Outputs
+---
 
-After deployment, you'll see:
-- `AgentSpaceId`: The ID of the created agent space
-- `AgentSpaceRoleArn`: The ARN of the agent space role
-- `OperatorRoleArn`: The ARN of the operator role
-- `AssociationId`: The ID of the AWS association
+## Part 2 (Optional): Add a Service Account for Cross-Account Monitoring
 
-## Post-Deployment Steps
+This extends the setup so the Agent Space can also monitor resources in a second AWS account. You'll:
 
-1. Run the operator app enablement script:
-   ```bash
-   ./scripts/enable-operator-app.sh
-   ```
+- Add a source AWS association in the DevOpsAgentStack pointing to the service account
+- Deploy the ServiceStack into the service account with an IAM role that trusts the Agent Space
 
-2. Verify your setup:
-   ```bash
-   # Get details of your AgentSpace
-   aws devopsagent get-agent-space \
-     --agent-space-id <AGENT_SPACE_ID> \
-     --endpoint-url "https://api.prod.cp.aidevops.us-east-1.api.aws" \
-     --region us-east-1
+### 2.1 Configure the service account ID
 
-   # List associations
-   aws devopsagent list-associations \
-     --agent-space-id <AGENT_SPACE_ID> \
-     --endpoint-url "https://api.prod.cp.aidevops.us-east-1.api.aws" \
-     --region us-east-1
-   ```
+Edit `lib/constants.ts` and set your service account ID:
 
-## Optional Associations
+```typescript
+export const SERVICE_ACCOUNT_ID = "<YOUR_SERVICE_ACCOUNT_ID>";
+```
 
-You can extend this setup by adding associations for:
-- Additional AWS accounts (cross-account monitoring)
-- GitHub repositories
-- ServiceNow instances
-- Dynatrace environments
-- Splunk instances
-- New Relic accounts
-- Datadog instances
+The DevOpsAgentStack already creates a source AWS association using this account ID. If you haven't deployed with it set yet, redeploy:
 
-Refer to the [CLI onboarding guide](https://docs.aws.amazon.com/devopsagent/latest/userguide/getting-started-with-aws-devops-agent-cli-onboarding-guide.html) for detailed instructions on adding these associations.
+```bash
+npm run build
+cdk deploy DevOpsAgentStack --profile monitoring
+```
+
+### 2.2 Set the Agent Space ARN
+
+Copy the `AgentSpaceArn` from the DevOpsAgentStack output (Step 1.4) and paste it into `lib/constants.ts`:
+
+```typescript
+export const AGENT_SPACE_ARN = "arn:aws:aidevops:us-east-1:<MONITORING_ACCOUNT_ID>:agentspace/<SPACE_ID>";
+```
+
+This is required — the ServiceStack uses it to scope the trust policy on the secondary account role. The ServiceStack will only be synthesized when this value is set.
+
+### 2.3 Bootstrap the service account
+
+```bash
+cdk bootstrap aws://<SERVICE_ACCOUNT_ID>/us-east-1 --profile service
+```
+
+### 2.4 Deploy the ServiceStack
+
+```bash
+npm run build
+cdk deploy ServiceStack --profile service
+```
+
+This creates:
+
+- An IAM role (`DevOpsAgentRole-SecondaryAccount`) in the service account that trusts the Agent Space
+- An echo Lambda function (`echo-service`) as a simple example service
+
+### 2.5 Test the echo service
+
+```bash
+aws lambda invoke \
+  --function-name echo-service \
+  --payload '{"test": "hello world"}' \
+  --profile service \
+  response.json
+
+cat response.json
+```
+
+---
+
+## What gets created
+
+### DevOpsAgentStack (Monitoring Account)
+
+| Resource | Name | Purpose |
+| --- | --- | --- |
+| Agent Space | `MyCDKAgentSpace` | Central agent space with operator app |
+| IAM Role | `DevOpsAgentRole-AgentSpace` | Assumed by the agent to monitor the account |
+| IAM Role | `DevOpsAgentRole-WebappAdmin` | Operator app role |
+| Association | AWS (monitor) | Links the monitoring account |
+| Association | AWS (source) | Links the service account (optional) |
+
+### ServiceStack (Service Account — Optional)
+
+| Resource | Name | Purpose |
+| --- | --- | --- |
+| IAM Role | `DevOpsAgentRole-SecondaryAccount` | Cross-account role trusted by the Agent Space |
+| Lambda | `echo-service` | Example service |
+
+---
 
 ## Cleanup
 
-To remove all resources:
+Destroy in reverse order:
+
 ```bash
-cdk destroy
+# If you deployed the ServiceStack
+cdk destroy ServiceStack --profile service
+
+# Then the DevOpsAgentStack
+cdk destroy DevOpsAgentStack --profile monitoring
 ```
-
-## Notes
-
-- All resources are created in the `us-east-1` region (DevOps Agent requirement)
-- The stack uses CloudFormation resource types `AWS::DevOpsAgent::AgentSpace` and `AWS::DevOpsAgent::Association`
-- The operator app must be enabled after stack deployment using the provided script
-- Replace placeholder values in the CLI commands with your actual agent space ID from the stack outputs
-
-## License
-
-This library is licensed under the MIT-0 License. See the LICENSE file.
-

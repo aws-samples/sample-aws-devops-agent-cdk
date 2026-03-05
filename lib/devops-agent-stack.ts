@@ -3,8 +3,17 @@ import { Construct } from 'constructs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as devopsagent from 'aws-cdk-lib/aws-devopsagent';
 
+export interface DevOpsAgentStackProps extends cdk.StackProps {
+  /**
+   * Account ID of the secondary (service) account for cross-account monitoring
+   */
+  secondaryAccountId: string;
+}
+
 export class DevOpsAgentStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  public readonly agentSpaceArn: string;
+
+  constructor(scope: Construct, id: string, props: DevOpsAgentStackProps) {
     super(scope, id, props);
 
     // 1. Create DevOps Agent Space Role (matches CLI step 1)
@@ -16,7 +25,7 @@ export class DevOpsAgentStack extends cdk.Stack {
             'aws:SourceAccount': this.account
           },
           ArnLike: {
-            'aws:SourceArn': `arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`
+            'aws:SourceArn': `arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`
           }
         }
       }),
@@ -63,7 +72,7 @@ export class DevOpsAgentStack extends cdk.Stack {
             'aws:SourceAccount': this.account
           },
           ArnLike: {
-            'aws:SourceArn': `arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`
+            'aws:SourceArn': `arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`
           }
         }
       }),
@@ -101,7 +110,7 @@ export class DevOpsAgentStack extends cdk.Stack {
                 'aidevops:DescribeSupportLevel',
                 'aidevops:SendChatMessage'
               ],
-              resources: [`arn:aws:aidevops:us-east-1:${this.account}:agentspace/*`]
+              resources: [`arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`]
             }),
             new iam.PolicyStatement({
               sid: 'AllowSupportOperatorActions',
@@ -121,7 +130,12 @@ export class DevOpsAgentStack extends cdk.Stack {
     // 3. Create Agent Space using proper L1 construct
     const agentSpace = new devopsagent.CfnAgentSpace(this, 'MyAgentSpace', {
       name: 'MyCDKAgentSpace',
-      description: 'AgentSpace for monitoring my application using CDK'
+      description: 'AgentSpace for monitoring my application using CDK',
+      operatorApp: {
+        iam: {
+          operatorAppRoleArn: operatorRole.roleArn,
+        },
+      }
     });
 
     // 4. Associate AWS Account using proper L1 construct
@@ -137,23 +151,47 @@ export class DevOpsAgentStack extends cdk.Stack {
         }
       }
     });
-
     awsAssociation.addDependency(agentSpace);
 
+    // 5. Associate cross-account monitoring
+     const secondaryAwsAssociation = new devopsagent.CfnAssociation(this, 'SecondaryAWSAssociation', {
+      agentSpaceId: agentSpace.ref,
+      serviceId: 'aws',
+      configuration: {
+        sourceAws: {
+          assumableRoleArn: `arn:aws:iam::${props.secondaryAccountId}:role/DevOpsAgentRole-SecondaryAccount`,
+          accountId: props.secondaryAccountId,
+          accountType: 'source',
+        }
+      }
+    });
+   secondaryAwsAssociation.addDependency(agentSpace);
+
+    // Store the agent space ARN for cross-stack reference
+    this.agentSpaceArn = agentSpace.attrArn;
+
     // Outputs
-    new cdk.CfnOutput(this, 'AgentSpaceId', {
-      value: agentSpace.ref,
-      description: 'ID of the created DevOps Agent Space'
+    new cdk.CfnOutput(this, 'AgentSpaceArn', {
+      value: agentSpace.attrArn,
+      description: 'ARN of the created DevOps Agent Space',
+      exportName: 'DevOpsAgentSpaceArn'
     });
 
     new cdk.CfnOutput(this, 'AgentSpaceRoleArn', {
       value: agentSpaceRole.roleArn,
-      description: 'ARN of the DevOps Agent Space Role'
+      description: 'ARN of the DevOps Agent Space Role',
+      exportName: 'DevOpsAgentSpaceRoleArn'
     });
 
     new cdk.CfnOutput(this, 'OperatorRoleArn', {
       value: operatorRole.roleArn,
       description: 'ARN of the DevOps Agent Operator Role'
+    });
+
+    new cdk.CfnOutput(this, 'PrimaryAccountId', {
+      value: this.account,
+      description: 'Primary Account ID',
+      exportName: 'DevOpsAgentPrimaryAccountId'
     });
 
     new cdk.CfnOutput(this, 'AssociationId', {
