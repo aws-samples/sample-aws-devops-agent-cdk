@@ -165,7 +165,7 @@ export class DevOpsAgentStack extends cdk.Stack {
         }
       }
     });
-   secondaryAwsAssociation.addDependency(agentSpace);
+   secondaryAwsAssociation.addDependency(awsAssociation);
 
     // Store the agent space ARN for cross-stack reference
     this.agentSpaceArn = agentSpace.attrArn;
