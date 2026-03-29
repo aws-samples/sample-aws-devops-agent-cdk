@@ -34,16 +34,17 @@ export class DevOpsAgentStack extends cdk.Stack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('AIDevOpsAgentAccessPolicy')
       ],
       inlinePolicies: {
-        AIDevOpsAllowAwsSupportActionsPolicy: new iam.PolicyDocument({
+        AllowCreateServiceLinkedRoles: new iam.PolicyDocument({
           statements: [
             new iam.PolicyStatement({
-              sid: 'AllowAwsSupportActions',
+              sid: 'AllowCreateServiceLinkedRoles',
               effect: iam.Effect.ALLOW,
               actions: [
-                'support:CreateCase',
-                'support:DescribeCases'
+                'iam:CreateServiceLinkedRole'
               ],
-              resources: ['*']
+              resources: [
+                `arn:aws:iam::${this.account}:role/aws-service-role/resource-explorer-2.amazonaws.com/AWSServiceRoleForResourceExplorer`
+              ]
             })
           ]
         })
