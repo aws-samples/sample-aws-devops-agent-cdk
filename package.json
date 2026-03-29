@@ -5,7 +5,7 @@
   "description": "CDK application for AWS DevOps Agent agentspace and associations",
   "main": "lib/index.js",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=18.0.0"
   },
   "scripts": {
     "build": "tsc",

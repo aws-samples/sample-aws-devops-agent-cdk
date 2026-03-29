@@ -38,29 +38,18 @@ export class ServiceStack extends cdk.Stack {
       description:
         "Secondary account role for DevOps Agent Space cross-account access",
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName("AIOpsAssistantPolicy"),
+        iam.ManagedPolicy.fromAwsManagedPolicyName("AIDevOpsAgentAccessPolicy"),
       ],
       inlinePolicies: {
-        AllowExpandedAIOpsAssistantPolicy: new iam.PolicyDocument({
+        AllowCreateServiceLinkedRoles: new iam.PolicyDocument({
           statements: [
             new iam.PolicyStatement({
-              sid: "AllowAwsSupportActions",
+              sid: "AllowCreateServiceLinkedRoles",
               effect: iam.Effect.ALLOW,
-              actions: ["support:CreateCase", "support:DescribeCases"],
-              resources: ["*"],
-            }),
-            new iam.PolicyStatement({
-              sid: "AllowExpandedAIOpsAssistantPolicy",
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "aidevops:GetKnowledgeItem",
-                "aidevops:ListKnowledgeItems",
-                "eks:AccessKubernetesApi",
-                "synthetics:GetCanaryRuns",
-                "route53:GetHealthCheckStatus",
-                "resource-explorer-2:Search",
+              actions: ["iam:CreateServiceLinkedRole"],
+              resources: [
+                `arn:aws:iam::${this.account}:role/aws-service-role/resource-explorer-2.amazonaws.com/AWSServiceRoleForResourceExplorer`,
               ],
-              resources: ["*"],
             }),
           ],
         }),
