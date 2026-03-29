@@ -31,10 +31,10 @@ export class DevOpsAgentStack extends cdk.Stack {
       }),
       description: 'Role for AWS DevOps Agent Space',
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AIOpsAssistantPolicy')
+        iam.ManagedPolicy.fromAwsManagedPolicyName('AIDevOpsAgentAccessPolicy')
       ],
       inlinePolicies: {
-        AllowExpandedAIOpsAssistantPolicy: new iam.PolicyDocument({
+        AIDevOpsAllowAwsSupportActionsPolicy: new iam.PolicyDocument({
           statements: [
             new iam.PolicyStatement({
               sid: 'AllowAwsSupportActions',
@@ -42,19 +42,6 @@ export class DevOpsAgentStack extends cdk.Stack {
               actions: [
                 'support:CreateCase',
                 'support:DescribeCases'
-              ],
-              resources: ['*']
-            }),
-            new iam.PolicyStatement({
-              sid: 'AllowExpandedAIOpsAssistantPolicy',
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'aidevops:GetKnowledgeItem',
-                'aidevops:ListKnowledgeItems',
-                'eks:AccessKubernetesApi',
-                'synthetics:GetCanaryRuns',
-                'route53:GetHealthCheckStatus',
-                'resource-explorer-2:Search'
               ],
               resources: ['*']
             })
@@ -77,54 +64,9 @@ export class DevOpsAgentStack extends cdk.Stack {
         }
       }),
       description: 'Role for AWS DevOps Agent Operator App',
-      inlinePolicies: {
-        AIDevOpsBasicOperatorActionsPolicy: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              sid: 'AllowBasicOperatorActions',
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'aidevops:GetAgentSpace',
-                'aidevops:GetAssociation',
-                'aidevops:ListAssociations',
-                'aidevops:CreateBacklogTask',
-                'aidevops:GetBacklogTask',
-                'aidevops:UpdateBacklogTask',
-                'aidevops:ListBacklogTasks',
-                'aidevops:ListChildExecutions',
-                'aidevops:ListJournalRecords',
-                'aidevops:DiscoverTopology',
-                'aidevops:InvokeAgent',
-                'aidevops:ListGoals',
-                'aidevops:ListRecommendations',
-                'aidevops:ListExecutions',
-                'aidevops:GetRecommendation',
-                'aidevops:UpdateRecommendation',
-                'aidevops:CreateKnowledgeItem',
-                'aidevops:ListKnowledgeItems',
-                'aidevops:GetKnowledgeItem',
-                'aidevops:UpdateKnowledgeItem',
-                'aidevops:ListPendingMessages',
-                'aidevops:InitiateChatForCase',
-                'aidevops:EndChatForCase',
-                'aidevops:DescribeSupportLevel',
-                'aidevops:SendChatMessage'
-              ],
-              resources: [`arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`]
-            }),
-            new iam.PolicyStatement({
-              sid: 'AllowSupportOperatorActions',
-              effect: iam.Effect.ALLOW,
-              actions: [
-                'support:DescribeCases',
-                'support:InitiateChatForCase',
-                'support:DescribeSupportLevel'
-              ],
-              resources: ['*']
-            })
-          ]
-        })
-      }
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('AIDevOpsOperatorAppAccessPolicy')
+      ]
     });
 
     // 3. Create Agent Space using proper L1 construct
