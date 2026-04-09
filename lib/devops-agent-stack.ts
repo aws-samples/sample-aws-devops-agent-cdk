@@ -54,21 +54,32 @@ export class DevOpsAgentStack extends cdk.Stack {
     // 2. Create Operator App Role (matches CLI step 2)
     const operatorRole = new iam.Role(this, 'DevOpsOperatorRole', {
       roleName: 'DevOpsAgentRole-WebappAdmin',
-      assumedBy: new iam.ServicePrincipal('aidevops.amazonaws.com', {
-        conditions: {
-          StringEquals: {
-            'aws:SourceAccount': this.account
-          },
-          ArnLike: {
-            'aws:SourceArn': `arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`
-          }
-        }
-      }),
+      assumedBy: new iam.ServicePrincipal('aidevops.amazonaws.com'),
       description: 'Role for AWS DevOps Agent Operator App',
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('AIDevOpsOperatorAppAccessPolicy')
       ]
     });
+
+    // Override the default trust policy to include both sts:AssumeRole and sts:TagSession in a single statement
+    const trustPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          principals: [new iam.ServicePrincipal('aidevops.amazonaws.com')],
+          actions: ['sts:AssumeRole', 'sts:TagSession'],
+          conditions: {
+            StringEquals: {
+              'aws:SourceAccount': this.account
+            },
+            ArnLike: {
+              'aws:SourceArn': `arn:aws:aidevops:${this.region}:${this.account}:agentspace/*`
+            }
+          }
+        })
+      ]
+    });
+    (operatorRole.node.defaultChild as iam.CfnRole).assumeRolePolicyDocument = trustPolicy;
 
     // 3. Create Agent Space using proper L1 construct
     const agentSpace = new devopsagent.CfnAgentSpace(this, 'MyAgentSpace', {
@@ -96,19 +107,21 @@ export class DevOpsAgentStack extends cdk.Stack {
     });
     awsAssociation.addDependency(agentSpace);
 
-    // 5. Associate cross-account monitoring
-     const secondaryAwsAssociation = new devopsagent.CfnAssociation(this, 'SecondaryAWSAssociation', {
-      agentSpaceId: agentSpace.ref,
-      serviceId: 'aws',
-      configuration: {
-        sourceAws: {
-          assumableRoleArn: `arn:aws:iam::${props.secondaryAccountId}:role/DevOpsAgentRole-SecondaryAccount`,
-          accountId: props.secondaryAccountId,
-          accountType: 'source',
+    // 5. Associate cross-account monitoring (only if secondary account is configured)
+    if (props.secondaryAccountId) {
+      const secondaryAwsAssociation = new devopsagent.CfnAssociation(this, 'SecondaryAWSAssociation', {
+        agentSpaceId: agentSpace.ref,
+        serviceId: 'aws',
+        configuration: {
+          sourceAws: {
+            assumableRoleArn: `arn:aws:iam::${props.secondaryAccountId}:role/DevOpsAgentRole-SecondaryAccount`,
+            accountId: props.secondaryAccountId,
+            accountType: 'source',
+          }
         }
-      }
-    });
-   secondaryAwsAssociation.addDependency(awsAssociation);
+      });
+      secondaryAwsAssociation.addDependency(awsAssociation);
+    }
 
     // Store the agent space ARN for cross-stack reference
     this.agentSpaceArn = agentSpace.attrArn;
